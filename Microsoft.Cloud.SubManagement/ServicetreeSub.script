@@ -1,0 +1,77 @@
+﻿//Script GUID:23d573b0-f5ef-4496-b6d4-03d5f7c5575d
+//Used for tracking history
+
+MODULE @"/shares/AzureAnalytics.Prod/Sdk/AzureAnalytics1.3.module" AS AzureAnalytics;  
+
+#DECLARE startDateTime DateTime = DateTime.Parse( @@startDateTime@@ );
+#DECLARE startDate string = @startDateTime.ToString("yyyy-MM-dd");
+#DECLARE orgUnit string = @@OrgUnitName@@;
+
+
+AzureAnalytics.Initialize(             
+       entity = "Microsoft.Cloud.Analytics.Dimensions.RdfeSubscriptionV1");
+
+
+
+rsRDFESubs = AzureAnalytics.LoadStream(          
+	entity = "Microsoft.Cloud.Analytics.Dimensions.RdfeSubscriptionV1",startDateTime=@startDate, endDateTime=@startDate);
+    
+AzureAnalytics.Initialize(             
+       entity = "Microsoft.Cloud.Tree.AIRSSubscriptionFeedV1");
+
+rsSTSub = AzureAnalytics.LoadSnapshot(          
+	entity = "Microsoft.Cloud.Tree.AIRSSubscriptionFeedV1");
+
+//    rsAirsSub = AzureAnalytics.LoadSnapshot(          
+//	entity = "Microsoft.Cloud.airs_subscriptions", snapshotDateTime=@@startDateTime@@);
+
+
+rsSub =
+    SELECT DISTINCT rdfe.SubscriptionId,
+                    rdfe.SubscriptionName,
+                    rdfe.SubscriptionDescription,
+                    rdfe.AccountId,
+                    rdfe.OfferType,
+                    rdfe.MocpOfferType,
+                    rdfe.AccountAdminLiveEmailId,
+                    rdfe.ServiceAdminLiveEmailId,
+                    rdfe.SubscriptionStatus,
+                    rdfe.IsProtected,
+                    rdfe.CanSelectGuestAgent,
+                    rdfe.SubscriptionFeatures,
+                    rdfe.InternalSubscription,
+                    rdfe.Timestamp,
+                    rdfe.TimeCreated,
+                    st.DivisionOid AS DivisionId,
+                    st.DivisionName,
+                    st.OrganizationOid AS OrganizationId,
+                    st.OrganizationName,
+                    st.ServiceGroupOid AS ServiceGroupId,
+                    st.ServiceGroupName,
+                    st.ServiceOid AS ServiceTreeId,
+                    st.ServiceName,
+                    st.Environment,
+                    st.CloudName
+    FROM rsRDFESubs AS rdfe
+         INNER JOIN
+             rsSTSub AS st
+         ON rdfe.SubscriptionId == st.SubscriptionId
+WHERE st.OrganizationName==@orgUnit ;
+
+
+//    rsSubCnt = SELECT COUNT() AS DataCount FROM rsSub;
+//
+//
+//OUTPUT rsSub 
+//    TO SSTREAM "/my/output/rsSub.ss";
+//
+//    OUTPUT rsSubCnt 
+//    TO SSTREAM "/my/output/rsSubCnt.ss";
+
+
+    AzureAnalytics.PublishSnapshot(
+    entity = @@targetEnityName@@,
+    snapshotDateTime = @startDate,
+    periodInMinutes = "1440",
+    input  = rsSub,    
+    expiryInDays ="30");
